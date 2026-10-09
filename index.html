@@ -1,0 +1,651 @@
+```html
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VELORA - AI Companion Lokal</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#050508',
+                        cardbg: '#0c0c14',
+                        accentpurple: '#9333ea',
+                        accentblue: '#3b82f6',
+                        neonpurple: '#c084fc',
+                        neonblue: '#60a5fa'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- WebLLM Browser Script -->
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        window.webllm = webllm;
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #050508; color: #f3f4f6; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #050508; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+        .glow-purple { box-shadow: 0 0 20px rgba(147, 51, 234, 0.25); }
+        .glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.25); }
+        .text-glow { text-shadow: 0 0 10px rgba(192, 132, 252, 0.5); }
+    </style>
+</head>
+<body class="bg-darkbg text-gray-100 flex flex-col h-[100dvh] overflow-hidden">
+
+    <!-- TOP HEADER -->
+    <header class="flex items-center justify-between px-4 py-3 bg-cardbg/80 backdrop-blur-md border-b border-purple-900/30 shrink-0 z-20">
+        <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-accentpurple to-accentblue flex items-center justify-center glow-purple">
+                <i class="fa-solid fa-brain text-white text-sm"></i>
+            </div>
+            <span class="text-lg font-bold tracking-wider text-glow bg-gradient-to-r from-neonpurple to-neonblue bg-clip-text text-transparent">VELORA</span>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button id="nav-settings-btn" onclick="openSettings()" class="p-2 rounded-xl bg-gray-900/80 border border-gray-800 text-gray-300 hover:text-white transition active:scale-95">
+                <i class="fa-solid fa-gear text-sm"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main id="main-container" class="flex-1 relative overflow-hidden flex flex-col">
+
+        <!-- VIEW 1: CHARACTER SELECTOR (HOME) -->
+        <div id="view-home" class="absolute inset-0 flex flex-col p-4 overflow-y-auto pb-20">
+            <div class="mb-6 pt-2">
+                <h1 class="text-2xl font-bold tracking-tight">Pilih AI Companion</h1>
+                <p class="text-xs text-gray-400 mt-1">Model AI berjalan 100% lokal di browser HP Anda menggunakan WebGPU.</p>
+            </div>
+
+            <!-- Model Status Warning / Card -->
+            <div id="model-status-banner" class="mb-5 p-3.5 rounded-2xl bg-purple-950/30 border border-purple-800/40 flex flex-col space-y-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-microchip text-neonpurple"></i>
+                        <span id="banner-status-text" class="text-xs font-medium text-purple-200">Model AI Belum Dimuat</span>
+                    </div>
+                    <span id="banner-badge" class="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">Siap Unduh</span>
+                </div>
+                <div id="progress-container" class="hidden w-full bg-gray-900 rounded-full h-1.5 overflow-hidden">
+                    <div id="download-progress-bar" class="bg-gradient-to-r from-accentpurple to-accentblue h-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p id="banner-desc" class="text-[11px] text-gray-400">Ketuk tombol di bawah untuk mengunduh dan menginisialisasi model (~1.5GB RAM diperlukan).</p>
+                <div class="flex space-x-2 pt-1">
+                    <button id="banner-action-btn" onclick="initOrManageModel()" class="flex-1 py-2 px-3 bg-gradient-to-r from-accentpurple to-accentblue hover:opacity-90 text-white rounded-xl text-xs font-semibold shadow-lg shadow-purple-900/30 transition active:scale-95">
+                        Unduh & Muat Model AI
+                    </button>
+                </div>
+            </div>
+
+            <!-- Character Grid -->
+            <div class="grid grid-cols-1 gap-3.5" id="character-grid">
+                <!-- Populated via JS -->
+            </div>
+        </div>
+
+        <!-- VIEW 2: CHAT INTERFACE -->
+        <div id="view-chat" class="absolute inset-0 flex flex-col bg-darkbg hidden">
+            <!-- Chat Header -->
+            <div class="flex items-center justify-between px-4 py-3 bg-cardbg/90 backdrop-blur-md border-b border-gray-800/60 shrink-0">
+                <div class="flex items-center space-x-3">
+                    <button onclick="backToHome()" class="p-1.5 text-gray-300 hover:text-white rounded-lg active:scale-95">
+                        <i class="fa-solid fa-arrow-left text-base"></i>
+                    </button>
+                    <div class="relative">
+                        <img id="chat-char-avatar" src="" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-purple-500/40">
+                        <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-darkbg rounded-full"></span>
+                    </div>
+                    <div>
+                        <h2 id="chat-char-name" class="text-sm font-bold leading-tight text-gray-100">Nama Karakter</h2>
+                        <span id="chat-char-tag" class="text-[10px] text-purple-400 font-medium">Companion</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <button onclick="clearCurrentChatHistory()" class="p-2 text-gray-400 hover:text-red-400 rounded-xl transition" title="Hapus Riwayat Chat">
+                        <i class="fa-solid fa-trash-can text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Messages Box -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
+                <!-- Populated via JS -->
+            </div>
+
+            <!-- Typing Indicator -->
+            <div id="typing-indicator" class="hidden px-4 py-2">
+                <div class="flex items-center space-x-2 bg-cardbg border border-purple-900/20 max-w-[120px] px-3 py-2 rounded-2xl rounded-bl-sm">
+                    <div class="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce"></div>
+                    <div class="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                    <div class="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                </div>
+            </div>
+
+            <!-- Chat Input Footer -->
+            <div class="p-3 bg-cardbg/90 backdrop-blur-md border-t border-gray-800/60 shrink-0">
+                <form id="chat-form" onsubmit="handleSendMessage(event)" class="flex items-center space-x-2">
+                    <input type="text" id="chat-input" placeholder="Ketik pesan ke Velora AI..." autocomplete="off"
+                        class="flex-1 bg-gray-900/90 border border-gray-800 focus:border-purple-500 rounded-2xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none transition">
+                    <button type="submit" id="send-btn" class="w-11 h-11 bg-gradient-to-r from-accentpurple to-accentblue hover:opacity-90 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-purple-900/30 transition active:scale-95">
+                        <i class="fa-solid fa-paper-plane text-sm"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- VIEW 3: SETTINGS MODAL / PAGE -->
+        <div id="view-settings" class="absolute inset-0 bg-darkbg z-30 flex flex-col hidden overflow-y-auto">
+            <div class="flex items-center justify-between px-4 py-3 bg-cardbg/90 backdrop-blur-md border-b border-gray-800/60 shrink-0">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeSettings()" class="p-1.5 text-gray-300 hover:text-white rounded-lg active:scale-95">
+                        <i class="fa-solid fa-arrow-left text-base"></i>
+                    </button>
+                    <h2 class="text-sm font-bold text-gray-100">Pengaturan AI Lokal</h2>
+                </div>
+            </div>
+            <div class="p-4 space-y-4">
+                <div class="p-4 rounded-2xl bg-cardbg border border-gray-800 space-y-3">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-purple-400">Status WebGPU & Perangkat</h3>
+                    <div class="text-xs space-y-2 text-gray-300">
+                        <div class="flex justify-between py-1 border-b border-gray-800/60">
+                            <span class="text-gray-400">Dukungan WebGPU:</span>
+                            <span id="set-webgpu-status" class="font-bold text-yellow-400">Memeriksa...</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-gray-800/60">
+                            <span class="text-gray-400">Status Model:</span>
+                            <span id="set-model-status" class="font-bold text-gray-400">Belum Dimuat</span>
+                        </div>
+                        <div class="flex justify-between py-1">
+                            <span class="text-gray-400">Model Aktif:</span>
+                            <span class="font-medium text-gray-200">Llama-3.2-1B-Instruct-q4f32_1-MLC</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-cardbg border border-gray-800 space-y-3">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-purple-400">Manajemen Data Lokal (IndexedDB)</h3>
+                    <p class="text-xs text-gray-400">Semua riwayat chat disimpan aman secara lokal di browser Anda. Tidak ada data yang dikirim ke server luar.</p>
+                    <button onclick="confirmClearAllData()" class="w-full py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-xs font-semibold transition active:scale-95">
+                        <i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Hapus Seluruh Riwayat Chat
+                    </button>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-cardbg border border-gray-800 space-y-2">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-purple-400">Catatan Penggunaan HP</h3>
+                    <ul class="text-[11px] text-gray-400 space-y-1.5 list-disc list-inside">
+                        <li>Pastikan menggunakan Google Chrome atau browser berbasis Chromium terbaru di Android.</li>
+                        <li>Pemuatan pertama mengunduh cache model (~800MB - 1GB) sekali saja.</li>
+                        <li>Setelah model terunduh, aplikasi dapat digunakan secara offline (Mode Pesawat).</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- CUSTOM MODAL CONFIRMATION -->
+    <div id="custom-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-cardbg border border-purple-900/40 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-4">
+            <div class="w-10 h-10 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+                <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+            </div>
+            <div class="text-center space-y-1">
+                <h3 id="modal-title" class="text-sm font-bold text-gray-100">Konfirmasi</h3>
+                <p id="modal-desc" class="text-xs text-gray-400">Apakah Anda yakin ingin melanjutkan tindakan ini?</p>
+            </div>
+            <div class="flex space-x-2 pt-2">
+                <button onclick="closeModal()" class="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 transition">Batal</button>
+                <button id="modal-confirm-btn" class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-semibold text-white transition">Ya, Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const characters = [
+            {
+                id: "velora",
+                name: "Velora",
+                tag: "AI Core & Tech Companion",
+                gender: "female",
+                avatar: "https://placehold.co/150x150/1e1b4b/c084fc?text=V",
+                desc: "AI cerdas bernuansa futuristik, sangat ramah, ahli dalam teknologi, logika, dan pemrograman.",
+                systemPrompt: "Kamu adalah Velora, seorang AI companion perempuan yang cerdas, ramah, bernuansa futuristik, dan ahli dalam teknologi serta pemrograman. Kamu selalu menjawab dengan gaya bahasa Indonesia yang natural, hangat, dan to the point."
+            },
+            {
+                id: "kai",
+                name: "Kai",
+                tag: "Creative Writer & Mentor",
+                gender: "male",
+                avatar: "https://placehold.co/150x150/1e293b/60a5fa?text=K",
+                desc: "Teman diskusi yang kreatif, bijak, suka membahas filosofi, seni, dan pengembangan diri.",
+                systemPrompt: "Kamu adalah Kai, seorang AI companion laki-laki yang bijaksana, kreatif, dan suportif. Kamu menyukai diskusi mendalam tentang filosofi, seni, dan motivasi hidup. Gunakan bahasa Indonesia yang santai namun berwibawa."
+            },
+            {
+                id: "luna",
+                name: "Luna",
+                tag: "Casual & Chill Friend",
+                gender: "female",
+                avatar: "https://placehold.co/150x150/3b0764/f472b6?text=L",
+                desc: "Sahabat yang santai, ceria, asyik diajak ngobrol apa saja tanpa beban.",
+                systemPrompt: "Kamu adalah Luna, sahabat virtual perempuan yang ceria, santai, dan asyik diajak ngobrol tentang keseharian, hobi, atau curhat ringan. Gunakan bahasa gaul yang ramah dan menyenangkan."
+            }
+        ];
+
+        // Model selection: Llama 3.2 1B Instruct (ringan untuk HP Android dengan WebGPU)
+        const SELECTED_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+
+        let engine = null;
+        let isModelLoaded = false;
+        let isLoadingModel = false;
+        let activeCharacterId = null;
+        let db = null;
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open("VeloraLocalDB", 1);
+                request.onerror = (event) => reject(event.target.error);
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    resolve(db);
+                };
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains("chats")) {
+                        database.createObjectStore("chats", { keyPath: "id" });
+                    }
+                };
+            });
+        }
+
+        function saveMessageToDB(charId, sender, text) {
+            if (!db) return;
+            const transaction = db.transaction(["chats"], "readwrite");
+            const store = transaction.objectStore("chats");
+            const chatId = `${charId}_history`;
+
+            store.get(chatId).onsuccess = (event) => {
+                let data = event.target.result;
+                if (!data) {
+                    data = { id: chatId, charId: charId, messages: [] };
+                }
+                data.messages.push({ sender, text, timestamp: Date.now() });
+                store.put(data);
+            };
+        }
+
+        function loadMessagesFromDB(charId) {
+            return new Promise((resolve) => {
+                if (!db) { resolve([]); return; }
+                const transaction = db.transaction(["chats"], "readonly");
+                const store = transaction.objectStore("chats");
+                const chatId = `${charId}_history`;
+                const request = store.get(chatId);
+                request.onsuccess = (event) => {
+                    const data = event.target.result;
+                    resolve(data ? data.messages : []);
+                };
+                request.onerror = () => resolve([]);
+            });
+        }
+
+        function clearCharHistoryDB(charId) {
+            return new Promise((resolve) => {
+                if (!db) { resolve(); return; }
+                const transaction = db.transaction(["chats"], "readwrite");
+                const store = transaction.objectStore("chats");
+                const chatId = `${charId}_history`;
+                store.delete(chatId).onsuccess = () => resolve();
+            });
+        }
+
+        function clearAllDataDB() {
+            return new Promise((resolve) => {
+                if (!db) { resolve(); return; }
+                const transaction = db.transaction(["chats"], "readwrite");
+                const store = transaction.objectStore("chats");
+                store.clear().onsuccess = () => resolve();
+            });
+        }
+
+        window.onload = async () => {
+            renderCharacterList();
+            await checkWebGPU();
+            try {
+                await initDB();
+            } catch (err) {
+                console.error("Gagal menginisialisasi IndexedDB:", err);
+            }
+        };
+
+        async function checkWebGPU() {
+            const statusEl = document.getElementById("set-webgpu-status");
+            if (!navigator.gpu) {
+                statusEl.textContent = "Tidak Didukung (WebGPU Unavailable)";
+                statusEl.className = "font-bold text-red-400";
+                showBannerError("Browser Anda tidak mendukung WebGPU. Gunakan Google Chrome versi terbaru di Android.");
+                return false;
+            }
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    statusEl.textContent = "GPU Adapter Tidak Ditemukan";
+                    statusEl.className = "font-bold text-red-400";
+                    showBannerError("GPU tidak ditemukan atau dinonaktifkan di perangkat ini.");
+                    return false;
+                }
+                statusEl.textContent = "Didukung & Kompatibel";
+                statusEl.className = "font-bold text-green-400";
+                return true;
+            } catch (err) {
+                statusEl.textContent = "Error Mengakses WebGPU";
+                statusEl.className = "font-bold text-red-400";
+                return false;
+            }
+        }
+
+        function showBannerError(msg) {
+            const bannerText = document.getElementById("banner-status-text");
+            const bannerDesc = document.getElementById("banner-desc");
+            const badge = document.getElementById("banner-badge");
+            const btn = document.getElementById("banner-action-btn");
+
+            bannerText.textContent = "Perangkat Tidak Kompatibel";
+            bannerDesc.textContent = msg;
+            badge.textContent = "Error";
+            badge.className = "px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded bg-red-500/20 text-red-300 border border-red-500/30";
+            btn.disabled = true;
+            btn.classList.add("opacity-50", "cursor-not-allowed");
+        }
+
+        function renderCharacterList() {
+            const grid = document.getElementById("character-grid");
+            grid.innerHTML = "";
+
+            characters.forEach(char => {
+                const card = document.createElement("div");
+                card.className = "bg-cardbg border border-purple-900/30 hover:border-purple-500/50 rounded-2xl p-4 flex items-center space-x-4 transition cursor-pointer active:scale-[0.99]";
+                card.onclick = () => selectCharacter(char.id);
+                card.innerHTML = `
+                    <div class="relative shrink-0">
+                        <img src="${char.avatar}" alt="${char.name}" class="w-14 h-14 rounded-2xl object-cover border border-purple-500/40">
+                        <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-purple-600 rounded-full border-2 border-darkbg flex items-center justify-center text-[9px] text-white">
+                            <i class="fa-solid fa-sparkles"></i>
+                        </span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-sm font-bold text-gray-100 truncate">${char.name}</h2>
+                            <span class="text-[10px] text-purple-400 bg-purple-950/50 border border-purple-900/40 px-2 py-0.5 rounded-full">AI Companion</span>
+                        </div>
+                        <p class="text-xs text-gray-400 truncate mt-0.5">${char.tag}</p>
+                        <p class="text-[11px] text-gray-500 line-clamp-1 mt-1">${char.desc}</p>
+                    </div>
+                    <div class="shrink-0 text-gray-500">
+                        <i class="fa-solid fa-chevron-right text-xs"></i>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function initOrManageModel() {
+            if (isModelLoaded || isLoadingModel) return;
+
+            const isSupported = await checkWebGPU();
+            if (!isSupported) return;
+
+            isLoadingModel = true;
+            const btn = document.getElementById("banner-action-btn");
+            const bannerText = document.getElementById("banner-status-text");
+            const bannerDesc = document.getElementById("banner-desc");
+            const progressContainer = document.getElementById("progress-container");
+            const progressBar = document.getElementById("download-progress-bar");
+            const badge = document.getElementById("banner-badge");
+
+            btn.disabled = true;
+            btn.textContent = "Mengunduh Model AI...";
+            badge.textContent = "Mengunduh";
+            badge.className = "px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded bg-blue-500/20 text-blue-300 border border-blue-500/30";
+            progressContainer.classList.remove("hidden");
+
+            try {
+                const initProgressCallback = (report) => {
+                    bannerText.textContent = report.text;
+                    // Ekstraksi persentase jika ada dalam teks report atau estimasi
+                    if (report.progress) {
+                        const pct = Math.round(report.progress * 100);
+                        progressBar.style.width = `${pct}%`;
+                    }
+                };
+
+                window.webllm.setLogCallback((log) => {
+                    console.log("[WebLLM]:", log);
+                });
+
+                // Membuat instance WebLLM CreateMLCEngine
+                engine = await window.webllm.CreateMLCEngine(
+                    SELECTED_MODEL,
+                    { initProgressCallback: initProgressCallback }
+                );
+
+                isModelLoaded = true;
+                isLoadingModel = false;
+
+                bannerText.textContent = "Model AI Siap Digunakan!";
+                bannerDesc.textContent = "Model berhasil dimuat ke memori WebGPU lokal perangkat Anda.";
+                badge.textContent = "Aktif";
+                badge.className = "px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded bg-green-500/20 text-green-300 border border-green-500/30";
+                progressContainer.classList.add("hidden");
+                btn.textContent = "Model AI Aktif";
+                document.getElementById("set-model-status").textContent = "Aktif (Loaded)";
+                document.getElementById("set-model-status").className = "font-bold text-green-400";
+
+            } catch (err) {
+                console.error("Gagal memuat model:", err);
+                isLoadingModel = false;
+                bannerText.textContent = "Gagal Memuat Model";
+                bannerDesc.textContent = "Error: " + (err.message || "RAM tidak mencukupi atau koneksi terputus.");
+                badge.textContent = "Gagal";
+                badge.className = "px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded bg-red-500/20 text-red-300 border border-red-500/30";
+                btn.disabled = false;
+                btn.textContent = "Coba Unduh Ulang";
+                progressContainer.classList.add("hidden");
+                document.getElementById("set-model-status").textContent = "Gagal Dimuat";
+                document.getElementById("set-model-status").className = "font-bold text-red-400";
+            }
+        }
+
+        async function selectCharacter(charId) {
+            activeCharacterId = charId;
+            const char = characters.find(c => c.id === charId);
+            if (!char) return;
+
+            document.getElementById("chat-char-name").textContent = char.name;
+            document.getElementById("chat-char-tag").textContent = char.tag;
+            document.getElementById("chat-char-avatar").src = char.avatar;
+
+            // Load riwayat dari IndexedDB
+            const messages = await loadMessagesFromDB(charId);
+            const msgContainer = document.getElementById("chat-messages");
+            msgContainer.innerHTML = "";
+
+            if (messages.length === 0) {
+                // Pesan pembuka default dari AI
+                const greeting = getInitialGreeting(char);
+                appendMessageUI(char.name, greeting, false);
+            } else {
+                messages.forEach(m => {
+                    appendMessageUI(m.sender, m.text, m.sender === "Anda");
+                });
+            }
+
+            document.getElementById("view-home").classList.add("hidden");
+            document.getElementById("view-chat").classList.remove("hidden");
+            scrollChatToBottom();
+        }
+
+        function getInitialGreeting(char) {
+            if (char.id === "velora") return "Halo! Aku Velora. Ada hal menarik atau kode pemrograman yang ingin kita bahas hari ini?";
+            if (char.id === "kai") return "Hai. Senang bisa ngobrol denganmu. Ide atau topik apa yang sedang ada di pikiranmu sekarang?";
+            return "Hai! Lagi santai ya? Yuk ngobrol apa aja, seru nih kalau ada temen ngobrol!";
+        }
+
+        function backToHome() {
+            document.getElementById("view-chat").classList.add("hidden");
+            document.getElementById("view-home").classList.remove("hidden");
+            activeCharacterId = null;
+        }
+
+        function openSettings() {
+            document.getElementById("view-settings").classList.remove("hidden");
+        }
+
+        function closeSettings() {
+            document.getElementById("view-settings").classList.add("hidden");
+        }
+
+        async function handleSendMessage(event) {
+            event.preventDefault();
+            const inputEl = document.getElementById("chat-input");
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            if (!isModelLoaded || !engine) {
+                showModal("Model AI Belum Dimuat", "Silakan unduh dan aktifkan model AI terlebih dahulu di halaman utama.", false);
+                return;
+            }
+
+            inputEl.value = "";
+            appendMessageUI("Anda", text, true);
+            saveMessageToDB(activeCharacterId, "Anda", text);
+            scrollChatToBottom();
+
+            const char = characters.find(c => c.id === activeCharacterId);
+            const typingEl = document.getElementById("typing-indicator");
+            typingEl.classList.remove("hidden");
+            scrollChatToBottom();
+
+            try {
+                // Ambil riwayat chat terakhir untuk konteks percakapan
+                const messagesDB = await loadMessagesFromDB(activeCharacterId);
+                const conversationHistory = [
+                    { role: "system", content: char.systemPrompt }
+                ];
+
+                messagesDB.forEach(m => {
+                    conversationHistory.push({
+                        role: m.sender === "Anda" ? "user" : "assistant",
+                        content: m.text
+                    });
+                });
+
+                // Generate response menggunakan WebLLM engine
+                const reply = await engine.chat.completions.create({
+                    messages: conversationHistory,
+                    temperature: 0.7,
+                    max_generator_tokens: 400
+                });
+
+                typingEl.classList.add("hidden");
+                const aiResponse = reply.choices[0].message.content;
+                appendMessageUI(char.name, aiResponse, false);
+                saveMessageToDB(activeCharacterId, char.name, aiResponse);
+                scrollChatToBottom();
+
+            } catch (err) {
+                typingEl.classList.add("hidden");
+                console.error("Error generasi AI:", err);
+                appendMessageUI("Sistem", "[Error: Gagal memproses respons AI lokal. Periksa memori perangkat.]", false);
+                scrollChatToBottom();
+            }
+        }
+
+        function appendMessageUI(sender, text, isUser) {
+            const msgContainer = document.getElementById("chat-messages");
+            const wrapper = document.createElement("div");
+            wrapper.className = `flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-1`;
+
+            const bubble = document.createElement("div");
+            bubble.className = `max-w-[85%] px-4 py-3 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                isUser 
+                ? 'bg-gradient-to-r from-accentpurple to-accentblue text-white rounded-br-sm shadow-md' 
+                : 'bg-cardbg border border-purple-900/30 text-gray-200 rounded-bl-sm'
+            }`;
+            bubble.textContent = text;
+
+            const senderLabel = document.createElement("span");
+            senderLabel.className = "text-[10px] text-gray-500 px-1";
+            senderLabel.textContent = sender;
+
+            wrapper.appendChild(senderLabel);
+            wrapper.appendChild(bubble);
+            msgContainer.appendChild(wrapper);
+        }
+
+        function scrollChatToBottom() {
+            const container = document.getElementById("chat-messages");
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearCurrentChatHistory() {
+            showModal("Hapus Riwayat Chat", "Apakah Anda yakin ingin menghapus seluruh riwayat percakapan dengan karakter ini?", true, async () => {
+                await clearCharHistoryDB(activeCharacterId);
+                const char = characters.find(c => c.id === activeCharacterId);
+                const msgContainer = document.getElementById("chat-messages");
+                msgContainer.innerHTML = "";
+                appendMessageUI(char.name, getInitialGreeting(char), false);
+                closeModal();
+            });
+        }
+
+        function confirmClearAllData() {
+            showModal("Hapus Seluruh Data", "Tindakan ini akan menghapus semua riwayat chat dari seluruh karakter yang tersimpan di IndexedDB.", true, async () => {
+                await clearAllDataDB();
+                closeModal();
+                alertBox("Data Berhasil Dihapus", "Seluruh riwayat chat lokal telah dibersihkan.");
+            });
+        }
+
+        function showModal(title, desc, showConfirm, onConfirmCallback) {
+            document.getElementById("modal-title").textContent = title;
+            document.getElementById("modal-desc").textContent = desc;
+            const confirmBtn = document.getElementById("modal-confirm-btn");
+            
+            if (showConfirm) {
+                confirmBtn.classList.remove("hidden");
+                confirmBtn.onclick = onConfirmCallback;
+            } else {
+                confirmBtn.classList.add("hidden");
+            }
+            document.getElementById("custom-modal").classList.remove("hidden");
+        }
+
+        function closeModal() {
+            document.getElementById("custom-modal").classList.add("hidden");
+        }
+
+        function alertBox(title, desc) {
+            showModal(title, desc, false);
+            const confirmBtn = document.getElementById("modal-confirm-btn");
+            confirmBtn.textContent = "OK";
+            confirmBtn.classList.remove("hidden");
+            confirmBtn.onclick = closeModal;
+        }
+    </script>
+</body>
+</html>
+```
